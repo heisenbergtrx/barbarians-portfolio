@@ -34,6 +34,7 @@ import {
   DollarSign,
   Trash2,
   Camera,
+  Pencil,
 } from 'lucide-react'
 import { Asset, AssetWithCalculations, CachedPrices, AllocationData } from '@/types'
 
@@ -165,47 +166,83 @@ export default function DashboardPage() {
     }
   }, [loading, assets.length, fetchPrices])
 
-  // Add asset
-  const handleAddAsset = async (assetData: Omit<Asset, 'id' | 'currentPrice'>) => {
+  // Save asset (add or update)
+  const handleSaveAsset = async (assetData: Omit<Asset, 'id' | 'currentPrice'>) => {
     if (!user) return
 
-    const { data, error } = await supabase
-      .from('assets')
-      .insert({
-        user_id: user.id,
-        symbol: assetData.symbol,
-        name: assetData.name,
-        type: assetData.type,
-        category: assetData.category,
-        quantity: assetData.quantity,
-        average_cost: assetData.averageCost,
-        currency: assetData.currency,
-      })
-      .select()
-      .single()
+    if (editingAsset) {
+      // Update existing asset
+      const { error } = await supabase
+        .from('assets')
+        .update({
+          symbol: assetData.symbol,
+          name: assetData.name,
+          type: assetData.type,
+          category: assetData.category,
+          quantity: assetData.quantity,
+          average_cost: assetData.averageCost,
+          currency: assetData.currency,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingAsset.id)
 
-    if (error) {
-      console.error('Error adding asset:', error)
-      throw error
-    }
-
-    if (data) {
-      const newAsset: Asset = {
-        id: data.id,
-        symbol: data.symbol,
-        name: data.name,
-        type: data.type,
-        category: data.category,
-        quantity: parseFloat(data.quantity),
-        averageCost: parseFloat(data.average_cost),
-        currentPrice: parseFloat(data.average_cost),
-        currency: data.currency,
+      if (error) {
+        console.error('Error updating asset:', error)
+        throw error
       }
-      setAssets([...assets, newAsset])
-      
-      // Refresh prices to get current price for new asset
+
+      // Update local state
+      setAssets(assets.map(a => 
+        a.id === editingAsset.id 
+          ? { ...a, ...assetData, currentPrice: assetData.averageCost }
+          : a
+      ))
+      setEditingAsset(null)
       fetchPrices(true)
+    } else {
+      // Add new asset
+      const { data, error } = await supabase
+        .from('assets')
+        .insert({
+          user_id: user.id,
+          symbol: assetData.symbol,
+          name: assetData.name,
+          type: assetData.type,
+          category: assetData.category,
+          quantity: assetData.quantity,
+          average_cost: assetData.averageCost,
+          currency: assetData.currency,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error adding asset:', error)
+        throw error
+      }
+
+      if (data) {
+        const newAsset: Asset = {
+          id: data.id,
+          symbol: data.symbol,
+          name: data.name,
+          type: data.type,
+          category: data.category,
+          quantity: parseFloat(data.quantity),
+          averageCost: parseFloat(data.average_cost),
+          currentPrice: parseFloat(data.average_cost),
+          currency: data.currency,
+        }
+        setAssets([...assets, newAsset])
+        fetchPrices(true)
+      }
     }
+  }
+
+  // Edit asset
+  const handleEditAsset = (asset: Asset) => {
+    setEditingAsset(asset)
+    setShowAddModal(true)
   }
 
   // Delete asset
@@ -401,14 +438,32 @@ export default function DashboardPage() {
                     <AssetRowHeader />
                     {assetsWithCalculations.map((asset) => (
                       <div key={asset.id} className="group relative">
-                        <AssetRow asset={asset} />
-                        <button
-                          onClick={() => handleDeleteAsset(asset.id)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20 text-red-500"
-                          title="Sil"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <AssetRow 
+                          asset={asset} 
+                          onClick={() => handleEditAsset(asset)}
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditAsset(asset)
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-amber-500/20 text-amber-500"
+                            title="Düzenle"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteAsset(asset.id)
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-red-500/20 text-red-500"
+                            title="Sil"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -472,7 +527,7 @@ export default function DashboardPage() {
           setShowAddModal(false)
           setEditingAsset(null)
         }}
-        onAdd={handleAddAsset}
+        onSave={handleSaveAsset}
         editAsset={editingAsset}
       />
     </div>
