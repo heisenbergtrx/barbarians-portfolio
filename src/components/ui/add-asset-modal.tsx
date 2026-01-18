@@ -112,7 +112,7 @@ export function AddAssetModal({ isOpen, onClose, onAdd, editAsset }: AddAssetMod
               label="Para Birimi"
               options={currencyOptions}
               value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+              onChange={(e) => setForm({ ...form, currency: e.target.value as 'TRY' | 'USD' })}
             />
           </div>
 
