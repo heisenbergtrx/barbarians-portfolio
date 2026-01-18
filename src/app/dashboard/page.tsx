@@ -15,6 +15,8 @@ import {
   AssetRowHeader,
   AllocationChart,
   Spinner,
+  AddAssetModal,
+  EmptyState,
 } from '@/components/ui'
 import {
   formatCurrency,
@@ -30,34 +32,21 @@ import {
   LogOut,
   Plus,
   DollarSign,
+  Trash2,
+  Camera,
 } from 'lucide-react'
 import { Asset, AssetWithCalculations, CachedPrices, AllocationData } from '@/types'
-
-// Your actual portfolio - will be moved to Supabase later
-const PORTFOLIO_ASSETS: Asset[] = [
-  // US Equities
-  { id: '1', symbol: 'AMD', name: 'Advanced Micro Devices', type: 'stock', category: 'us_equity', quantity: 400, averageCost: 85, currentPrice: 120, currency: 'USD' },
-  { id: '2', symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'stock', category: 'us_equity', quantity: 200, averageCost: 56, currentPrice: 195, currency: 'USD' },
-  { id: '3', symbol: 'MSFT', name: 'Microsoft Corporation', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 250, currentPrice: 430, currency: 'USD' },
-  { id: '4', symbol: 'AMZN', name: 'Amazon.com Inc.', type: 'stock', category: 'us_equity', quantity: 251, averageCost: 120, currentPrice: 225, currency: 'USD' },
-  { id: '5', symbol: 'META', name: 'Meta Platforms Inc.', type: 'stock', category: 'us_equity', quantity: 80, averageCost: 180, currentPrice: 620, currency: 'USD' },
-  { id: '6', symbol: 'MA', name: 'Mastercard Inc.', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 350, currentPrice: 530, currency: 'USD' },
-  { id: '7', symbol: 'SPGI', name: 'S&P Global Inc.', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 380, currentPrice: 505, currency: 'USD' },
-  { id: '8', symbol: 'NFLX', name: 'Netflix Inc.', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 400, currentPrice: 950, currency: 'USD' },
-  
-  // Cash Reserve (TEFAS + USD Cash + USDT)
-  { id: '9', symbol: 'DLY', name: 'Deniz Portfoy Para Piyasasi', type: 'tefas', category: 'cash_reserve', quantity: 100000, averageCost: 1, currentPrice: 1.05, currency: 'TRY' },
-  { id: '10', symbol: 'DIP', name: 'Deniz Portfoy Kisa Vadeli', type: 'tefas', category: 'cash_reserve', quantity: 50000, averageCost: 1, currentPrice: 1.03, currency: 'TRY' },
-  { id: '11', symbol: 'USD', name: 'USD Nakit (IBKR)', type: 'cash', category: 'cash_reserve', quantity: 37100, averageCost: 1, currentPrice: 1, currency: 'USD' },
-  { id: '12', symbol: 'USDT', name: 'Tether USD', type: 'crypto', category: 'cash_reserve', quantity: 30400, averageCost: 1, currentPrice: 1, currency: 'USD' },
-]
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [prices, setPrices] = useState<CachedPrices | null>(null)
-  const [assets, setAssets] = useState<Asset[]>(PORTFOLIO_ASSETS)
+  const [assets, setAssets] = useState<Asset[]>([])
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
+  const [savingSnapshot, setSavingSnapshot] = useState(false)
+  
   const supabase = createClient()
   const router = useRouter()
 
@@ -67,7 +56,7 @@ export default function DashboardPage() {
   // Calculate asset values
   const assetsWithCalculations: AssetWithCalculations[] = assets.map((asset) => {
     const priceData = prices?.prices[asset.symbol]
-    const currentPrice = priceData?.price || asset.currentPrice
+    const currentPrice = priceData?.price || asset.currentPrice || asset.averageCost
     
     const totalCost = asset.quantity * asset.averageCost
     const currentValue = asset.quantity * currentPrice
@@ -84,7 +73,7 @@ export default function DashboardPage() {
       currentValueTRY,
       profitLoss,
       profitLossPercent,
-      weight: 0, // Will be calculated after total
+      weight: 0,
     }
   })
 
@@ -102,7 +91,7 @@ export default function DashboardPage() {
     a.weight = totalValueTRY > 0 ? (a.currentValueTRY / totalValueTRY) * 100 : 0
   })
 
-  // Allocation by category (Nakit Rezerv, ABD Hisse, Kripto)
+  // Allocation by category
   const allocationByCategory: AllocationData[] = Object.keys(categoryLabels).map((category) => {
     const categoryAssets = assetsWithCalculations.filter((a) => a.category === category)
     const value = categoryAssets.reduce((sum, a) => sum + a.currentValueTRY, 0)
@@ -113,18 +102,44 @@ export default function DashboardPage() {
     }
   }).filter((d) => d.value > 0)
 
-  // Fetch user
+  // Fetch user and assets
   useEffect(() => {
-    const getUser = async () => {
+    const initialize = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/login')
         return
       }
       setUser(user)
+      
+      // Fetch user's assets from Supabase
+      const { data: assetsData, error } = await supabase
+        .from('assets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+      
+      if (error) {
+        console.error('Error fetching assets:', error)
+      } else if (assetsData) {
+        // Map database columns to our Asset interface
+        const mappedAssets: Asset[] = assetsData.map((a: any) => ({
+          id: a.id,
+          symbol: a.symbol,
+          name: a.name,
+          type: a.type,
+          category: a.category,
+          quantity: parseFloat(a.quantity),
+          averageCost: parseFloat(a.average_cost),
+          currentPrice: parseFloat(a.average_cost), // Will be updated by price fetch
+          currency: a.currency,
+        }))
+        setAssets(mappedAssets)
+      }
+      
       setLoading(false)
     }
-    getUser()
+    initialize()
   }, [supabase, router])
 
   // Fetch prices
@@ -145,8 +160,107 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    fetchPrices()
-  }, [fetchPrices])
+    if (!loading && assets.length > 0) {
+      fetchPrices()
+    }
+  }, [loading, assets.length, fetchPrices])
+
+  // Add asset
+  const handleAddAsset = async (assetData: Omit<Asset, 'id' | 'currentPrice'>) => {
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from('assets')
+      .insert({
+        user_id: user.id,
+        symbol: assetData.symbol,
+        name: assetData.name,
+        type: assetData.type,
+        category: assetData.category,
+        quantity: assetData.quantity,
+        average_cost: assetData.averageCost,
+        currency: assetData.currency,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error adding asset:', error)
+      throw error
+    }
+
+    if (data) {
+      const newAsset: Asset = {
+        id: data.id,
+        symbol: data.symbol,
+        name: data.name,
+        type: data.type,
+        category: data.category,
+        quantity: parseFloat(data.quantity),
+        averageCost: parseFloat(data.average_cost),
+        currentPrice: parseFloat(data.average_cost),
+        currency: data.currency,
+      }
+      setAssets([...assets, newAsset])
+      
+      // Refresh prices to get current price for new asset
+      fetchPrices(true)
+    }
+  }
+
+  // Delete asset
+  const handleDeleteAsset = async (assetId: string) => {
+    if (!confirm('Bu varlığı silmek istediğinizden emin misiniz?')) return
+
+    const { error } = await supabase
+      .from('assets')
+      .delete()
+      .eq('id', assetId)
+
+    if (error) {
+      console.error('Error deleting asset:', error)
+      return
+    }
+
+    setAssets(assets.filter(a => a.id !== assetId))
+  }
+
+  // Save snapshot
+  const handleSaveSnapshot = async () => {
+    if (!user || assets.length === 0) return
+    
+    setSavingSnapshot(true)
+    
+    const now = new Date()
+    const weekNumber = getWeekNumber(now)
+    
+    const { error } = await supabase
+      .from('snapshots')
+      .insert({
+        user_id: user.id,
+        total_value_try: totalValueTRY,
+        assets: assetsWithCalculations,
+        week_number: weekNumber,
+      })
+
+    if (error) {
+      console.error('Error saving snapshot:', error)
+      alert('Snapshot kaydedilemedi!')
+    } else {
+      alert('Portföy snapshot kaydedildi!')
+    }
+    
+    setSavingSnapshot(false)
+  }
+
+  // Get week number of year
+  const getWeekNumber = (date: Date): number => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+    const dayNum = d.getUTCDay() || 7
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  }
 
   // Logout
   const handleLogout = async () => {
@@ -165,7 +279,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-barbar-bg">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-barbar-bg/80 backdrop-blur-xl border-b border-barbar-border">
+      <header className="sticky top-0 z-40 bg-barbar-bg/80 backdrop-blur-xl border-b border-barbar-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -178,16 +292,28 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* User menu */}
-            <div className="flex items-center gap-4">
+            {/* Actions */}
+            <div className="flex items-center gap-2 sm:gap-4">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => fetchPrices(true)}
                 disabled={refreshing}
+                title="Fiyatları Yenile"
               >
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Yenile</span>
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSaveSnapshot}
+                disabled={savingSnapshot || assets.length === 0}
+                title="Snapshot Kaydet"
+              >
+                <Camera className={`w-4 h-4 ${savingSnapshot ? 'animate-pulse' : ''}`} />
+                <span className="hidden sm:inline">Snapshot</span>
               </Button>
 
               <div className="flex items-center gap-3">
@@ -205,7 +331,7 @@ export default function DashboardPage() {
                 </span>
               </div>
 
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <Button variant="ghost" size="sm" onClick={handleLogout} title="Çıkış">
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
@@ -215,102 +341,140 @@ export default function DashboardPage() {
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Last updated */}
-        {prices?.lastUpdated && (
-          <p className="text-sm text-barbar-muted mb-6">
-            Son güncelleme: {formatRelativeTime(prices.lastUpdated)}
-            {' · '}
-            <span className="text-amber-500">USD/TRY: {usdTry.toFixed(2)}</span>
-          </p>
-        )}
+        {assets.length === 0 ? (
+          <EmptyState onAddClick={() => setShowAddModal(true)} />
+        ) : (
+          <>
+            {/* Last updated */}
+            {prices?.lastUpdated && (
+              <p className="text-sm text-barbar-muted mb-6">
+                Son güncelleme: {formatRelativeTime(prices.lastUpdated)}
+                {' · '}
+                <span className="text-amber-500">USD/TRY: {usdTry.toFixed(2)}</span>
+              </p>
+            )}
 
-        {/* Summary stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard
-            title="Toplam Değer"
-            value={formatCurrency(totalValueTRY, 'TRY')}
-            icon={<Wallet className="w-5 h-5" />}
-          />
-          <StatCard
-            title="Toplam Maliyet"
-            value={formatCurrency(totalCostTRY, 'TRY')}
-            icon={<DollarSign className="w-5 h-5" />}
-          />
-          <StatCard
-            title="Kar/Zarar"
-            value={formatCurrency(Math.abs(totalProfitLoss), 'TRY')}
-            change={totalProfitLossPercent}
-            trend={totalProfitLoss >= 0 ? 'up' : 'down'}
-            icon={<TrendingUp className="w-5 h-5" />}
-          />
-          <StatCard
-            title="Varlık Sayısı"
-            value={assets.length.toString()}
-            changeLabel="farklı pozisyon"
-            icon={<PieChart className="w-5 h-5" />}
-          />
-        </div>
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+              <StatCard
+                title="Toplam Değer"
+                value={formatCurrency(totalValueTRY, 'TRY', true)}
+                icon={<Wallet className="w-5 h-5" />}
+              />
+              <StatCard
+                title="Toplam Maliyet"
+                value={formatCurrency(totalCostTRY, 'TRY', true)}
+                icon={<DollarSign className="w-5 h-5" />}
+              />
+              <StatCard
+                title="Kar/Zarar"
+                value={formatCurrency(Math.abs(totalProfitLoss), 'TRY', true)}
+                change={totalProfitLossPercent}
+                trend={totalProfitLoss >= 0 ? 'up' : 'down'}
+                icon={<TrendingUp className="w-5 h-5" />}
+              />
+              <StatCard
+                title="Varlık Sayısı"
+                value={assets.length.toString()}
+                changeLabel="farklı pozisyon"
+                icon={<PieChart className="w-5 h-5" />}
+              />
+            </div>
 
-        {/* Two column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Assets list */}
-          <div className="lg:col-span-2">
-            <Card variant="bordered">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Varlıklar</CardTitle>
-                <Button variant="primary" size="sm">
-                  <Plus className="w-4 h-4" />
-                  Ekle
-                </Button>
-              </CardHeader>
-              <div className="overflow-x-auto">
-                <AssetRowHeader />
-                {assetsWithCalculations.map((asset) => (
-                  <AssetRow key={asset.id} asset={asset} />
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* Allocation chart */}
-          <div className="lg:col-span-1">
-            <Card variant="bordered">
-              <CardHeader>
-                <CardTitle>Dağılım</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AllocationChart
-                  data={allocationByCategory}
-                  totalValue={totalValueTRY}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Quick stats by category */}
-            <Card variant="bordered" className="mt-6">
-              <CardHeader>
-                <CardTitle>Kategori Bazlı Özet</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {allocationByCategory.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-sm text-barbar-muted">{item.name}</span>
-                    </div>
-                    <span className="text-sm font-medium text-barbar-text tabular-nums">
-                      {formatCurrency(item.value, 'TRY', true)}
-                    </span>
+            {/* Two column layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Assets list */}
+              <div className="lg:col-span-2">
+                <Card variant="bordered">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle>Varlıklar</CardTitle>
+                    <Button 
+                      variant="primary" 
+                      size="sm"
+                      onClick={() => setShowAddModal(true)}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Ekle
+                    </Button>
+                  </CardHeader>
+                  <div className="overflow-x-auto">
+                    <AssetRowHeader />
+                    {assetsWithCalculations.map((asset) => (
+                      <div key={asset.id} className="group relative">
+                        <AssetRow asset={asset} />
+                        <button
+                          onClick={() => handleDeleteAsset(asset.id)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20 text-red-500"
+                          title="Sil"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                </Card>
+              </div>
+
+              {/* Allocation chart */}
+              <div className="lg:col-span-1">
+                <Card variant="bordered">
+                  <CardHeader>
+                    <CardTitle>Dağılım</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {allocationByCategory.length > 0 ? (
+                      <AllocationChart
+                        data={allocationByCategory}
+                        totalValue={totalValueTRY}
+                      />
+                    ) : (
+                      <p className="text-barbar-muted text-center py-8">
+                        Veri yok
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Quick stats by category */}
+                {allocationByCategory.length > 0 && (
+                  <Card variant="bordered" className="mt-6">
+                    <CardHeader>
+                      <CardTitle>Kategori Bazlı Özet</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {allocationByCategory.map((item) => (
+                        <div key={item.name} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-sm text-barbar-muted">{item.name}</span>
+                          </div>
+                          <span className="text-sm font-medium text-barbar-text tabular-nums">
+                            {formatCurrency(item.value, 'TRY', true)}
+                          </span>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </main>
+
+      {/* Add Asset Modal */}
+      <AddAssetModal
+        isOpen={showAddModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setEditingAsset(null)
+        }}
+        onAdd={handleAddAsset}
+        editAsset={editingAsset}
+      />
     </div>
   )
 }
