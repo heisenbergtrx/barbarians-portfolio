@@ -1,64 +1,43 @@
 import { NextResponse } from 'next/server'
 import { CachedPrices, MarketData } from '@/types'
 
-// In-memory cache (will reset on cold start, but that's fine for 15min cache)
+// In-memory cache
 let priceCache: CachedPrices | null = null
 const CACHE_DURATION_MS = 15 * 60 * 1000 // 15 minutes
 
-// TEFAS fund codes - add your actual fund codes here
-const TEFAS_FUNDS = ['TI2', 'TMG', 'IPB']
-
-// US Stocks
-const US_STOCKS = ['AAPL', 'GOOGL', 'MSFT', 'NVDA', 'TSLA', 'META', 'AMZN']
-
-// Crypto
-const CRYPTO_IDS = ['bitcoin', 'ethereum']
-
-async function fetchTEFASPrices(): Promise<Record<string, MarketData>> {
-  const prices: Record<string, MarketData> = {}
-  
-  // TEFAS API - using TEFAS public endpoint
-  // Note: You may need to adjust this based on actual TEFAS API availability
-  for (const fund of TEFAS_FUNDS) {
-    try {
-      // TEFAS doesn't have a public API, so we'll use a workaround
-      // Option 1: Use a third-party service
-      // Option 2: Scrape TEFAS website (not recommended)
-      // Option 3: Manual entry / database storage
-      
-      // For now, we'll mark these as needing manual update
-      // In production, you'd integrate with a proper TEFAS data provider
-      prices[fund] = {
-        symbol: fund,
-        price: 0, // Will be fetched from database or manual input
-        change24h: 0,
-        currency: 'TRY',
-        lastUpdated: new Date().toISOString(),
-      }
-    } catch (error) {
-      console.error(`Error fetching TEFAS ${fund}:`, error)
-    }
-  }
-  
-  return prices
+// Crypto symbol to CoinGecko ID mapping
+const CRYPTO_MAP: Record<string, string> = {
+  'BTC': 'bitcoin',
+  'ETH': 'ethereum',
+  'USDT': 'tether',
+  'USDC': 'usd-coin',
+  'SOL': 'solana',
+  'XRP': 'ripple',
+  'ADA': 'cardano',
+  'DOGE': 'dogecoin',
+  'AVAX': 'avalanche-2',
+  'DOT': 'polkadot',
+  'LINK': 'chainlink',
+  'MATIC': 'matic-network',
 }
 
-async function fetchUSStockPrices(): Promise<Record<string, MarketData>> {
+// Stablecoin prices (always $1)
+const STABLECOINS = ['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD']
+
+async function fetchYahooFinancePrices(symbols: string[]): Promise<Record<string, MarketData>> {
   const prices: Record<string, MarketData> = {}
   
+  if (symbols.length === 0) return prices
+  
   try {
-    // Using Yahoo Finance API via RapidAPI or direct endpoint
-    // Free alternative: Alpha Vantage, Finnhub, or Yahoo Finance scraping
-    
-    // Yahoo Finance unofficial API
-    const symbols = US_STOCKS.join(',')
+    const symbolsStr = symbols.join(',')
     const response = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}`,
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolsStr}`,
       {
         headers: {
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
-        next: { revalidate: 900 }, // 15 minutes
+        cache: 'no-store',
       }
     )
     
@@ -67,33 +46,55 @@ async function fetchUSStockPrices(): Promise<Record<string, MarketData>> {
       const quotes = data.quoteResponse?.result || []
       
       for (const quote of quotes) {
-        prices[quote.symbol] = {
-          symbol: quote.symbol,
-          price: quote.regularMarketPrice || 0,
-          change24h: quote.regularMarketChangePercent || 0,
-          currency: 'USD',
-          lastUpdated: new Date().toISOString(),
+        if (quote.regularMarketPrice) {
+          prices[quote.symbol] = {
+            symbol: quote.symbol,
+            price: quote.regularMarketPrice,
+            change24h: quote.regularMarketChangePercent || 0,
+            currency: 'USD',
+            lastUpdated: new Date().toISOString(),
+          }
         }
       }
+    } else {
+      console.error('Yahoo Finance API error:', response.status)
     }
   } catch (error) {
-    console.error('Error fetching US stocks:', error)
+    console.error('Error fetching Yahoo Finance:', error)
   }
   
   return prices
 }
 
-async function fetchCryptoPrices(): Promise<Record<string, MarketData>> {
+async function fetchCoinGeckoPrices(symbols: string[]): Promise<Record<string, MarketData>> {
   const prices: Record<string, MarketData> = {}
   
-  try {
-    // CoinGecko API (free tier: 10-30 calls/minute)
-    const ids = CRYPTO_IDS.join(',')
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-      {
-        next: { revalidate: 900 }, // 15 minutes
+  // Handle stablecoins first
+  for (const symbol of symbols) {
+    if (STABLECOINS.includes(symbol)) {
+      prices[symbol] = {
+        symbol,
+        price: 1,
+        change24h: 0,
+        currency: 'USD',
+        lastUpdated: new Date().toISOString(),
       }
+    }
+  }
+  
+  // Get CoinGecko IDs for remaining cryptos
+  const cryptoIds = symbols
+    .filter(s => !STABLECOINS.includes(s))
+    .map(s => CRYPTO_MAP[s])
+    .filter(Boolean)
+  
+  if (cryptoIds.length === 0) return prices
+  
+  try {
+    const idsStr = cryptoIds.join(',')
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${idsStr}&vs_currencies=usd&include_24hr_change=true`,
+      { cache: 'no-store' }
     )
     
     if (response.ok) {
@@ -101,19 +102,22 @@ async function fetchCryptoPrices(): Promise<Record<string, MarketData>> {
       
       for (const [id, values] of Object.entries(data)) {
         const v = values as { usd: number; usd_24h_change: number }
-        const symbol = id === 'bitcoin' ? 'BTC' : id === 'ethereum' ? 'ETH' : id.toUpperCase()
+        // Find the symbol for this CoinGecko ID
+        const symbol = Object.entries(CRYPTO_MAP).find(([_, cgId]) => cgId === id)?.[0]
         
-        prices[symbol] = {
-          symbol,
-          price: v.usd,
-          change24h: v.usd_24h_change || 0,
-          currency: 'USD',
-          lastUpdated: new Date().toISOString(),
+        if (symbol) {
+          prices[symbol] = {
+            symbol,
+            price: v.usd,
+            change24h: v.usd_24h_change || 0,
+            currency: 'USD',
+            lastUpdated: new Date().toISOString(),
+          }
         }
       }
     }
   } catch (error) {
-    console.error('Error fetching crypto:', error)
+    console.error('Error fetching CoinGecko:', error)
   }
   
   return prices
@@ -121,43 +125,67 @@ async function fetchCryptoPrices(): Promise<Record<string, MarketData>> {
 
 async function fetchUSDTRY(): Promise<number> {
   try {
-    // Using exchangerate-api or similar
     const response = await fetch(
       'https://api.exchangerate-api.com/v4/latest/USD',
-      {
-        next: { revalidate: 900 }, // 15 minutes
-      }
+      { cache: 'no-store' }
     )
     
     if (response.ok) {
       const data = await response.json()
-      return data.rates?.TRY || 34.5 // Fallback rate
+      return data.rates?.TRY || 34.5
     }
   } catch (error) {
     console.error('Error fetching USD/TRY:', error)
   }
   
-  return 34.5 // Fallback
+  return 34.5
 }
 
-async function refreshPrices(): Promise<CachedPrices> {
-  console.log('Refreshing price cache...')
+async function refreshPrices(symbols: string[]): Promise<CachedPrices> {
+  console.log('Refreshing prices for:', symbols)
   
-  const [tefas, stocks, crypto, usdTry] = await Promise.all([
-    fetchTEFASPrices(),
-    fetchUSStockPrices(),
-    fetchCryptoPrices(),
+  // Separate symbols by type
+  const stockSymbols: string[] = []
+  const cryptoSymbols: string[] = []
+  const tefasSymbols: string[] = []
+  
+  for (const symbol of symbols) {
+    if (CRYPTO_MAP[symbol] || STABLECOINS.includes(symbol)) {
+      cryptoSymbols.push(symbol)
+    } else if (symbol.length <= 3 && /^[A-Z]+$/.test(symbol)) {
+      // Likely TEFAS (3 letter Turkish fund codes)
+      tefasSymbols.push(symbol)
+    } else {
+      stockSymbols.push(symbol)
+    }
+  }
+  
+  const [stockPrices, cryptoPrices, usdTry] = await Promise.all([
+    fetchYahooFinancePrices(stockSymbols),
+    fetchCoinGeckoPrices(cryptoSymbols),
     fetchUSDTRY(),
   ])
+  
+  // TEFAS funds - mark as needing manual price (no public API)
+  const tefasPrices: Record<string, MarketData> = {}
+  for (const symbol of tefasSymbols) {
+    tefasPrices[symbol] = {
+      symbol,
+      price: 0, // Will use averageCost as fallback
+      change24h: 0,
+      currency: 'TRY',
+      lastUpdated: new Date().toISOString(),
+    }
+  }
   
   const now = new Date()
   const expiresAt = new Date(now.getTime() + CACHE_DURATION_MS)
   
   const cache: CachedPrices = {
     prices: {
-      ...tefas,
-      ...stocks,
-      ...crypto,
+      ...stockPrices,
+      ...cryptoPrices,
+      ...tefasPrices,
     },
     usdTry,
     lastUpdated: now.toISOString(),
@@ -174,18 +202,34 @@ function isCacheValid(): boolean {
   return new Date() < expiresAt
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Check if cache is valid
-    if (isCacheValid() && priceCache) {
+    // Get symbols from query params
+    const { searchParams } = new URL(request.url)
+    const symbolsParam = searchParams.get('symbols')
+    const symbols = symbolsParam ? symbolsParam.split(',') : []
+    
+    // If no symbols provided and cache is valid, return cache
+    if (symbols.length === 0 && isCacheValid() && priceCache) {
       return NextResponse.json({
         data: priceCache,
         cached: true,
       })
     }
     
-    // Refresh cache
-    const freshData = await refreshPrices()
+    // If symbols provided but all are in cache, return cached data
+    if (symbols.length > 0 && isCacheValid() && priceCache) {
+      const allCached = symbols.every(s => priceCache!.prices[s] !== undefined)
+      if (allCached) {
+        return NextResponse.json({
+          data: priceCache,
+          cached: true,
+        })
+      }
+    }
+    
+    // Refresh cache with requested symbols
+    const freshData = await refreshPrices(symbols)
     
     return NextResponse.json({
       data: freshData,
@@ -194,7 +238,6 @@ export async function GET() {
   } catch (error) {
     console.error('Price API error:', error)
     
-    // Return stale cache if available
     if (priceCache) {
       return NextResponse.json({
         data: priceCache,
@@ -211,14 +254,18 @@ export async function GET() {
 }
 
 // Force refresh endpoint
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const freshData = await refreshPrices()
+    const body = await request.json().catch(() => ({}))
+    const symbols = body.symbols || []
+    
+    const freshData = await refreshPrices(symbols)
     return NextResponse.json({
       data: freshData,
       cached: false,
     })
   } catch (error) {
+    console.error('Price refresh error:', error)
     return NextResponse.json(
       { error: 'Failed to refresh prices' },
       { status: 500 }

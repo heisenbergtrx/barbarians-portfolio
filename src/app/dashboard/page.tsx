@@ -145,26 +145,44 @@ export default function DashboardPage() {
 
   // Fetch prices
   const fetchPrices = useCallback(async (force = false) => {
+    if (assets.length === 0) return
+    
     setRefreshing(true)
     try {
-      const method = force ? 'POST' : 'GET'
-      const res = await fetch('/api/prices', { method })
-      const data = await res.json()
-      if (data.data) {
-        setPrices(data.data)
+      // Get symbols from portfolio
+      const symbols = assets.map(a => a.symbol)
+      
+      if (force) {
+        // POST request with symbols in body
+        const res = await fetch('/api/prices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols }),
+        })
+        const data = await res.json()
+        if (data.data) {
+          setPrices(data.data)
+        }
+      } else {
+        // GET request with symbols in query
+        const res = await fetch(`/api/prices?symbols=${symbols.join(',')}`)
+        const data = await res.json()
+        if (data.data) {
+          setPrices(data.data)
+        }
       }
     } catch (error) {
       console.error('Error fetching prices:', error)
     } finally {
       setRefreshing(false)
     }
-  }, [])
+  }, [assets])
 
   useEffect(() => {
     if (!loading && assets.length > 0) {
-      fetchPrices()
+      fetchPrices(true) // Force refresh on initial load
     }
-  }, [loading, assets.length, fetchPrices])
+  }, [loading, assets.length]) // Remove fetchPrices from deps to avoid infinite loop
 
   // Save asset (add or update)
   const handleSaveAsset = async (assetData: Omit<Asset, 'id' | 'currentPrice'>) => {
