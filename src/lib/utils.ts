@@ -88,7 +88,7 @@ export function formatRelativeTime(date: Date | string): string {
 
 // Asset type labels
 export const assetTypeLabels: Record<string, string> = {
-  tefas: 'TEFAS Fon',
+  tefas: 'TEFAS',
   stock: 'ABD Hisse',
   crypto: 'Kripto',
   cash: 'Nakit',
@@ -99,6 +99,19 @@ export const assetTypeColors: Record<string, string> = {
   stock: '#3b82f6',     // blue
   crypto: '#8b5cf6',    // purple
   cash: '#22c55e',      // green
+}
+
+// Category labels for pie chart grouping
+export const categoryLabels: Record<string, string> = {
+  cash_reserve: 'Nakit Rezerv',
+  us_equity: 'ABD Hisse',
+  crypto: 'Kripto',
+}
+
+export const categoryColors: Record<string, string> = {
+  cash_reserve: '#22c55e',  // green
+  us_equity: '#3b82f6',     // blue
+  crypto: '#8b5cf6',        // purple
 }
 
 // Validation

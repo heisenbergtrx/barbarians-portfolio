@@ -18,10 +18,9 @@ import {
 } from '@/components/ui'
 import {
   formatCurrency,
-  formatPercent,
   formatRelativeTime,
-  assetTypeColors,
-  assetTypeLabels,
+  categoryColors,
+  categoryLabels,
 } from '@/lib/utils'
 import {
   Wallet,
@@ -34,16 +33,23 @@ import {
 } from 'lucide-react'
 import { Asset, AssetWithCalculations, CachedPrices, AllocationData } from '@/types'
 
-// Demo data - replace with Supabase data later
-const DEMO_ASSETS: Asset[] = [
-  { id: '1', symbol: 'TI2', name: 'TEB Portfoy Ikinci His. Fonu', type: 'tefas', quantity: 1000, averageCost: 15.5, currentPrice: 16.2, currency: 'TRY' },
-  { id: '2', symbol: 'TMG', name: 'Tacirler Portfoy Birinci His.', type: 'tefas', quantity: 500, averageCost: 22.0, currentPrice: 24.5, currency: 'TRY' },
-  { id: '3', symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'stock', quantity: 15, averageCost: 56, currentPrice: 195, currency: 'USD' },
-  { id: '4', symbol: 'AAPL', name: 'Apple Inc.', type: 'stock', quantity: 25, averageCost: 120, currentPrice: 185, currency: 'USD' },
-  { id: '5', symbol: 'NVDA', name: 'NVIDIA Corporation', type: 'stock', quantity: 10, averageCost: 150, currentPrice: 880, currency: 'USD' },
-  { id: '6', symbol: 'BTC', name: 'Bitcoin', type: 'crypto', quantity: 0.5, averageCost: 25000, currentPrice: 97000, currency: 'USD' },
-  { id: '7', symbol: 'ETH', name: 'Ethereum', type: 'crypto', quantity: 5, averageCost: 1800, currentPrice: 3200, currency: 'USD' },
-  { id: '8', symbol: 'USD', name: 'ABD Dolari Nakit', type: 'cash', quantity: 5000, averageCost: 1, currentPrice: 1, currency: 'USD' },
+// Your actual portfolio - will be moved to Supabase later
+const PORTFOLIO_ASSETS: Asset[] = [
+  // US Equities
+  { id: '1', symbol: 'AMD', name: 'Advanced Micro Devices', type: 'stock', category: 'us_equity', quantity: 400, averageCost: 85, currentPrice: 120, currency: 'USD' },
+  { id: '2', symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'stock', category: 'us_equity', quantity: 200, averageCost: 56, currentPrice: 195, currency: 'USD' },
+  { id: '3', symbol: 'MSFT', name: 'Microsoft Corporation', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 250, currentPrice: 430, currency: 'USD' },
+  { id: '4', symbol: 'AMZN', name: 'Amazon.com Inc.', type: 'stock', category: 'us_equity', quantity: 251, averageCost: 120, currentPrice: 225, currency: 'USD' },
+  { id: '5', symbol: 'META', name: 'Meta Platforms Inc.', type: 'stock', category: 'us_equity', quantity: 80, averageCost: 180, currentPrice: 620, currency: 'USD' },
+  { id: '6', symbol: 'MA', name: 'Mastercard Inc.', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 350, currentPrice: 530, currency: 'USD' },
+  { id: '7', symbol: 'SPGI', name: 'S&P Global Inc.', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 380, currentPrice: 505, currency: 'USD' },
+  { id: '8', symbol: 'NFLX', name: 'Netflix Inc.', type: 'stock', category: 'us_equity', quantity: 100, averageCost: 400, currentPrice: 950, currency: 'USD' },
+  
+  // Cash Reserve (TEFAS + USD Cash + USDT)
+  { id: '9', symbol: 'DLY', name: 'Deniz Portfoy Para Piyasasi', type: 'tefas', category: 'cash_reserve', quantity: 100000, averageCost: 1, currentPrice: 1.05, currency: 'TRY' },
+  { id: '10', symbol: 'DIP', name: 'Deniz Portfoy Kisa Vadeli', type: 'tefas', category: 'cash_reserve', quantity: 50000, averageCost: 1, currentPrice: 1.03, currency: 'TRY' },
+  { id: '11', symbol: 'USD', name: 'USD Nakit (IBKR)', type: 'cash', category: 'cash_reserve', quantity: 37100, averageCost: 1, currentPrice: 1, currency: 'USD' },
+  { id: '12', symbol: 'USDT', name: 'Tether USD', type: 'crypto', category: 'cash_reserve', quantity: 30400, averageCost: 1, currentPrice: 1, currency: 'USD' },
 ]
 
 export default function DashboardPage() {
@@ -51,7 +57,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [prices, setPrices] = useState<CachedPrices | null>(null)
-  const [assets, setAssets] = useState<Asset[]>(DEMO_ASSETS)
+  const [assets, setAssets] = useState<Asset[]>(PORTFOLIO_ASSETS)
   const supabase = createClient()
   const router = useRouter()
 
@@ -96,14 +102,14 @@ export default function DashboardPage() {
     a.weight = totalValueTRY > 0 ? (a.currentValueTRY / totalValueTRY) * 100 : 0
   })
 
-  // Allocation by type
-  const allocationByType: AllocationData[] = Object.keys(assetTypeLabels).map((type) => {
-    const typeAssets = assetsWithCalculations.filter((a) => a.type === type)
-    const value = typeAssets.reduce((sum, a) => sum + a.currentValueTRY, 0)
+  // Allocation by category (Nakit Rezerv, ABD Hisse, Kripto)
+  const allocationByCategory: AllocationData[] = Object.keys(categoryLabels).map((category) => {
+    const categoryAssets = assetsWithCalculations.filter((a) => a.category === category)
+    const value = categoryAssets.reduce((sum, a) => sum + a.currentValueTRY, 0)
     return {
-      name: assetTypeLabels[type],
+      name: categoryLabels[category],
       value,
-      color: assetTypeColors[type],
+      color: categoryColors[category],
     }
   }).filter((d) => d.value > 0)
 
@@ -274,23 +280,23 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <AllocationChart
-                  data={allocationByType}
+                  data={allocationByCategory}
                   totalValue={totalValueTRY}
                 />
               </CardContent>
             </Card>
 
-            {/* Quick stats by type */}
+            {/* Quick stats by category */}
             <Card variant="bordered" className="mt-6">
               <CardHeader>
-                <CardTitle>Tip Bazlı Özet</CardTitle>
+                <CardTitle>Kategori Bazlı Özet</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {allocationByType.map((item) => (
+                {allocationByCategory.map((item) => (
                   <div key={item.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div
-                        className="w-3 h-3 rounded-full"
+                        className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: item.color }}
                       />
                       <span className="text-sm text-barbar-muted">{item.name}</span>

@@ -18,8 +18,8 @@ export function AssetRow({ asset, onClick }: AssetRowProps) {
       onClick={onClick}
       className={cn(
         `
-        grid grid-cols-12 gap-4 items-center
-        px-4 py-3
+        grid grid-cols-12 gap-2 lg:gap-4 items-center
+        px-3 lg:px-4 py-3
         border-b border-barbar-border/50
         transition-all duration-200
         hover:bg-barbar-border/20
@@ -28,21 +28,21 @@ export function AssetRow({ asset, onClick }: AssetRowProps) {
       )}
     >
       {/* Symbol & Name */}
-      <div className="col-span-4 sm:col-span-3 flex items-center gap-3">
+      <div className="col-span-5 lg:col-span-3 flex items-center gap-2 lg:gap-3 min-w-0">
         <div
-          className="w-2 h-8 rounded-full"
+          className="w-1.5 lg:w-2 h-8 rounded-full flex-shrink-0"
           style={{ backgroundColor: typeColor }}
         />
-        <div className="min-w-0">
-          <p className="font-medium text-barbar-text truncate">{asset.symbol}</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-barbar-text truncate text-sm lg:text-base">{asset.symbol}</p>
           <p className="text-xs text-barbar-muted truncate">{asset.name}</p>
         </div>
       </div>
 
       {/* Type badge - hidden on mobile */}
-      <div className="hidden sm:flex col-span-2 items-center">
+      <div className="hidden lg:flex col-span-2 items-center">
         <span
-          className="px-2 py-0.5 text-xs rounded-full"
+          className="px-2 py-0.5 text-xs rounded-full whitespace-nowrap"
           style={{
             backgroundColor: `${typeColor}20`,
             color: typeColor,
@@ -53,7 +53,7 @@ export function AssetRow({ asset, onClick }: AssetRowProps) {
       </div>
 
       {/* Quantity & Avg Cost - hidden on mobile */}
-      <div className="hidden md:block col-span-2 text-right">
+      <div className="hidden lg:block col-span-2 text-right">
         <p className="text-sm text-barbar-text tabular-nums">
           {asset.quantity.toLocaleString('tr-TR')}
         </p>
@@ -63,8 +63,8 @@ export function AssetRow({ asset, onClick }: AssetRowProps) {
       </div>
 
       {/* Current Value */}
-      <div className="col-span-4 sm:col-span-2 text-right">
-        <p className="font-medium text-barbar-text tabular-nums">
+      <div className="col-span-4 lg:col-span-2 text-right">
+        <p className="font-medium text-barbar-text tabular-nums text-sm lg:text-base">
           {formatCurrency(asset.currentValueTRY, 'TRY')}
         </p>
         <p className="text-xs text-barbar-muted tabular-nums">
@@ -73,7 +73,7 @@ export function AssetRow({ asset, onClick }: AssetRowProps) {
       </div>
 
       {/* P/L */}
-      <div className="col-span-4 sm:col-span-3 text-right">
+      <div className="col-span-3 lg:col-span-3 text-right">
         <div
           className={cn(
             'flex items-center justify-end gap-1',
@@ -81,12 +81,12 @@ export function AssetRow({ asset, onClick }: AssetRowProps) {
           )}
         >
           {isPositive ? (
-            <TrendingUp className="w-4 h-4" />
+            <TrendingUp className="w-3 h-3 lg:w-4 lg:h-4 flex-shrink-0" />
           ) : (
-            <TrendingDown className="w-4 h-4" />
+            <TrendingDown className="w-3 h-3 lg:w-4 lg:h-4 flex-shrink-0" />
           )}
-          <span className="font-medium tabular-nums">
-            {formatCurrency(Math.abs(asset.profitLoss), 'TRY')}
+          <span className="font-medium tabular-nums text-xs lg:text-sm">
+            {formatCurrency(Math.abs(asset.profitLoss), 'TRY', true)}
           </span>
         </div>
         <p
@@ -105,12 +105,12 @@ export function AssetRow({ asset, onClick }: AssetRowProps) {
 // Header row
 export function AssetRowHeader() {
   return (
-    <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-medium text-barbar-muted uppercase tracking-wider border-b border-barbar-border">
-      <div className="col-span-4 sm:col-span-3">Varlik</div>
-      <div className="hidden sm:block col-span-2">Tip</div>
-      <div className="hidden md:block col-span-2 text-right">Miktar</div>
-      <div className="col-span-4 sm:col-span-2 text-right">Deger</div>
-      <div className="col-span-4 sm:col-span-3 text-right">K/Z</div>
+    <div className="grid grid-cols-12 gap-2 lg:gap-4 px-3 lg:px-4 py-2 text-xs font-medium text-barbar-muted uppercase tracking-wider border-b border-barbar-border">
+      <div className="col-span-5 lg:col-span-3">Varlik</div>
+      <div className="hidden lg:block col-span-2">Tip</div>
+      <div className="hidden lg:block col-span-2 text-right">Miktar</div>
+      <div className="col-span-4 lg:col-span-2 text-right">Deger</div>
+      <div className="col-span-3 lg:col-span-3 text-right">K/Z</div>
     </div>
   )
 }

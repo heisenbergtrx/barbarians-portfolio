@@ -5,6 +5,7 @@ export interface Asset {
   symbol: string
   name: string
   type: 'tefas' | 'stock' | 'crypto' | 'cash'
+  category: 'cash_reserve' | 'us_equity' | 'crypto' // For grouping in pie chart
   quantity: number
   averageCost: number
   currentPrice: number
@@ -63,6 +64,7 @@ export interface AddAssetForm {
   symbol: string
   name: string
   type: Asset['type']
+  category: Asset['category']
   quantity: number
   averageCost: number
   currency: Asset['currency']
@@ -78,4 +80,17 @@ export interface AllocationData {
 export interface PerformanceData {
   date: string
   value: number
+}
+
+// Snapshot for weekly tracking
+export interface PortfolioSnapshot {
+  id: string
+  user_id: string
+  date: string
+  total_value_try: number
+  total_cost_try: number
+  profit_loss: number
+  profit_loss_percent: number
+  assets_snapshot: Asset[]
+  created_at: string
 }
