@@ -129,13 +129,13 @@ export function AddAssetModal({ isOpen, onClose, onAdd, editAsset }: AddAssetMod
               label="Tip"
               options={typeOptions}
               value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              onChange={(e) => setForm({ ...form, type: e.target.value as 'tefas' | 'stock' | 'crypto' | 'cash' })}
             />
             <Select
               label="Kategori"
               options={categoryOptions}
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              onChange={(e) => setForm({ ...form, category: e.target.value as 'cash_reserve' | 'us_equity' | 'crypto' })}
             />
           </div>
 
