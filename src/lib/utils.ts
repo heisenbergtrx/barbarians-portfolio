@@ -11,18 +11,22 @@ export function formatCurrency(
   currency: 'TRY' | 'USD' = 'TRY',
   compact = false
 ): string {
+  if (compact && Math.abs(value) >= 1000) {
+    const options: Intl.NumberFormatOptions = {
+      style: 'currency',
+      currency: currency,
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }
+    return new Intl.NumberFormat('tr-TR', options).format(value)
+  }
+  
   const options: Intl.NumberFormatOptions = {
     style: 'currency',
     currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }
-
-  if (compact && Math.abs(value) >= 1000) {
-    options.notation = 'compact'
-    options.maximumFractionDigits = 1
-  }
-
   return new Intl.NumberFormat('tr-TR', options).format(value)
 }
 
@@ -31,16 +35,18 @@ export function formatNumber(
   decimals = 2,
   compact = false
 ): string {
+  if (compact && Math.abs(value) >= 1000) {
+    const options: Intl.NumberFormatOptions = {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }
+    return new Intl.NumberFormat('tr-TR', options).format(value)
+  }
+  
   const options: Intl.NumberFormatOptions = {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }
-
-  if (compact && Math.abs(value) >= 1000) {
-    options.notation = 'compact'
-    options.maximumFractionDigits = 1
-  }
-
   return new Intl.NumberFormat('tr-TR', options).format(value)
 }
 
