@@ -32,7 +32,8 @@ export async function GET(request: Request) {
     }
 
     // Get unique user IDs
-    const uniqueUserIds = [...new Set(users?.map(u => u.user_id) || [])]
+    const userIdSet = new Set(users?.map(u => u.user_id) || [])
+    const uniqueUserIds = Array.from(userIdSet)
 
     // Get current USD/TRY rate
     let usdTry = 34.5
