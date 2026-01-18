@@ -104,13 +104,13 @@ export default function LoginPage() {
               <a href="#" className="text-amber-500 hover:underline">
                 Kullanım Şartları
               </a>
-              'nı kabul etmiş olursunuz.
+              &apos;nı kabul etmiş olursunuz.
             </p>
           </div>
 
           {/* Quote */}
           <p className="mt-8 text-center text-sm text-barbar-muted italic animate-fade-in animate-delay-200">
-            "The goal of a successful trader is to make the best trades. Money is secondary."
+            &ldquo;The goal of a successful trader is to make the best trades. Money is secondary.&rdquo;
           </p>
         </div>
       </div>

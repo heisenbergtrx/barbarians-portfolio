@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import {
@@ -185,9 +186,11 @@ export default function DashboardPage() {
 
               <div className="flex items-center gap-3">
                 {user?.user_metadata?.avatar_url && (
-                  <img
+                  <Image
                     src={user.user_metadata.avatar_url}
                     alt="Avatar"
+                    width={32}
+                    height={32}
                     className="w-8 h-8 rounded-full"
                   />
                 )}
