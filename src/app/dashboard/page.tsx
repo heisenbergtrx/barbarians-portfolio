@@ -17,6 +17,7 @@ import {
   Spinner,
   AddAssetModal,
   EmptyState,
+  PortfolioAnalytics,
 } from '@/components/ui'
 import {
   formatCurrency,
@@ -33,7 +34,6 @@ import {
   Plus,
   DollarSign,
   Trash2,
-  Camera,
   Pencil,
 } from 'lucide-react'
 import { Asset, AssetWithCalculations, CachedPrices, AllocationData } from '@/types'
@@ -46,7 +46,7 @@ export default function DashboardPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
-  const [savingSnapshot, setSavingSnapshot] = useState(false)
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'analytics'>('portfolio')
   
   const supabase = createClient()
   const router = useRouter()
@@ -262,43 +262,6 @@ export default function DashboardPage() {
     setAssets(assets.filter(a => a.id !== assetId))
   }
 
-  // Save snapshot
-  const handleSaveSnapshot = async () => {
-    if (!user || assets.length === 0) return
-    
-    setSavingSnapshot(true)
-    
-    const now = new Date()
-    const weekNumber = getWeekNumber(now)
-    
-    const { error } = await supabase
-      .from('snapshots')
-      .insert({
-        user_id: user.id,
-        total_value_try: totalValueTRY,
-        assets: assetsWithCalculations,
-        week_number: weekNumber,
-      })
-
-    if (error) {
-      console.error('Error saving snapshot:', error)
-      alert('Snapshot kaydedilemedi!')
-    } else {
-      alert('Portföy snapshot kaydedildi!')
-    }
-    
-    setSavingSnapshot(false)
-  }
-
-  // Get week number of year
-  const getWeekNumber = (date: Date): number => {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-    const dayNum = d.getUTCDay() || 7
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-  }
-
   // Logout
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -335,22 +298,11 @@ export default function DashboardPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => fetchPrices(true)}
-                disabled={refreshing}
+                disabled={refreshing || assets.length === 0}
                 title="Fiyatları Yenile"
               >
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">Yenile</span>
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSaveSnapshot}
-                disabled={savingSnapshot || assets.length === 0}
-                title="Snapshot Kaydet"
-              >
-                <Camera className={`w-4 h-4 ${savingSnapshot ? 'animate-pulse' : ''}`} />
-                <span className="hidden sm:inline">Snapshot</span>
+                <span className="hidden sm:inline">Fiyatları Güncelle</span>
               </Button>
 
               <div className="flex items-center gap-3">
@@ -384,48 +336,74 @@ export default function DashboardPage() {
           <>
             {/* Last updated */}
             {prices?.lastUpdated && (
-              <p className="text-sm text-barbar-muted mb-6">
+              <p className="text-sm text-barbar-muted mb-4">
                 Son güncelleme: {formatRelativeTime(prices.lastUpdated)}
                 {' · '}
                 <span className="text-amber-500">USD/TRY: {usdTry.toFixed(2)}</span>
               </p>
             )}
 
-            {/* Summary stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
-              <StatCard
-                title="Toplam Değer"
-                value={formatCurrency(totalValueTRY, 'TRY', true)}
-                icon={<Wallet className="w-5 h-5" />}
-              />
-              <StatCard
-                title="Toplam Maliyet"
-                value={formatCurrency(totalCostTRY, 'TRY', true)}
-                icon={<DollarSign className="w-5 h-5" />}
-              />
-              <StatCard
-                title="Kar/Zarar"
-                value={formatCurrency(Math.abs(totalProfitLoss), 'TRY', true)}
-                change={totalProfitLossPercent}
-                trend={totalProfitLoss >= 0 ? 'up' : 'down'}
-                icon={<TrendingUp className="w-5 h-5" />}
-              />
-              <StatCard
-                title="Varlık Sayısı"
-                value={assets.length.toString()}
-                changeLabel="farklı pozisyon"
-                icon={<PieChart className="w-5 h-5" />}
-              />
+            {/* Tabs */}
+            <div className="flex gap-1 mb-6 p-1 bg-barbar-card rounded-lg w-fit">
+              <button
+                onClick={() => setActiveTab('portfolio')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  activeTab === 'portfolio'
+                    ? 'bg-amber-500 text-barbar-bg'
+                    : 'text-barbar-muted hover:text-barbar-text'
+                }`}
+              >
+                Portföy
+              </button>
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  activeTab === 'analytics'
+                    ? 'bg-amber-500 text-barbar-bg'
+                    : 'text-barbar-muted hover:text-barbar-text'
+                }`}
+              >
+                Analiz
+              </button>
             </div>
 
-            {/* Two column layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Assets list */}
-              <div className="lg:col-span-2">
-                <Card variant="bordered">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Varlıklar</CardTitle>
-                    <Button 
+            {activeTab === 'portfolio' ? (
+              <>
+                {/* Summary stats */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+                  <StatCard
+                    title="Toplam Değer"
+                    value={formatCurrency(totalValueTRY, 'TRY', true)}
+                    icon={<Wallet className="w-5 h-5" />}
+                  />
+                  <StatCard
+                    title="Toplam Maliyet"
+                    value={formatCurrency(totalCostTRY, 'TRY', true)}
+                    icon={<DollarSign className="w-5 h-5" />}
+                  />
+                  <StatCard
+                    title="Kar/Zarar"
+                    value={formatCurrency(Math.abs(totalProfitLoss), 'TRY', true)}
+                    change={totalProfitLossPercent}
+                    trend={totalProfitLoss >= 0 ? 'up' : 'down'}
+                    icon={<TrendingUp className="w-5 h-5" />}
+                  />
+                  <StatCard
+                    title="Varlık Sayısı"
+                    value={assets.length.toString()}
+                    changeLabel="farklı pozisyon"
+                    icon={<PieChart className="w-5 h-5" />}
+                  />
+                </div>
+
+                {/* Two column layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Assets list */}
+                  <div className="lg:col-span-2">
+                    <Card variant="bordered">
+                      <CardHeader className="flex flex-row items-center justify-between">
+                        <CardTitle>Varlıklar</CardTitle>
+                        <Button 
                       variant="primary" 
                       size="sm"
                       onClick={() => setShowAddModal(true)}
@@ -516,6 +494,15 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+              </>
+            ) : (
+              /* Analytics Tab */
+              <PortfolioAnalytics
+                assets={assetsWithCalculations}
+                totalValue={totalValueTRY}
+                totalCost={totalCostTRY}
+              />
+            )}
           </>
         )}
       </main>
